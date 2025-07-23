@@ -128,26 +128,37 @@ class NgaMonitorGUI:
         self.canvas = FigureCanvasTkAgg(self.figure, master=self.analysis_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # 创建风险帖子列表
+        # 创建高风险帖子列表区域，支持横纵滚动
         risk_frame = ttk.LabelFrame(self.analysis_frame, text="高风险帖子")
-        risk_frame.pack(fill=tk.BOTH, padx=10, pady=10)
-        
-        self.risk_tree = ttk.Treeview(risk_frame, columns=("post_id", "title", "risk_level"), 
-                                     show="headings", height=5)
+        risk_frame.pack(fill=tk.BOTH, padx=10, pady=10, expand=True)
+
+        # 横向滚动条
+        xscrollbar = ttk.Scrollbar(risk_frame, orient=tk.HORIZONTAL)
+        xscrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        # 纵向滚动条
+        yscrollbar = ttk.Scrollbar(risk_frame, orient=tk.VERTICAL)
+        yscrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.risk_tree = ttk.Treeview(
+            risk_frame,
+            columns=("post_id", "title", "risk_level"),
+            show="headings",
+            height=10,
+            xscrollcommand=xscrollbar.set,
+            yscrollcommand=yscrollbar.set
+        )
         self.risk_tree.column("post_id", width=80, anchor=tk.CENTER)
-        self.risk_tree.column("title", width=300)
+        self.risk_tree.column("title", width=400)
         self.risk_tree.column("risk_level", width=100, anchor=tk.CENTER)
-        
+
         self.risk_tree.heading("post_id", text="帖子ID")
         self.risk_tree.heading("title", text="标题")
         self.risk_tree.heading("risk_level", text="风险等级")
-        
-        scrollbar = ttk.Scrollbar(risk_frame, orient=tk.VERTICAL, command=self.risk_tree.yview)
-        self.risk_tree.configure(yscrollcommand=scrollbar.set)
-        
+
         self.risk_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
+        xscrollbar.config(command=self.risk_tree.xview)
+        yscrollbar.config(command=self.risk_tree.yview)
+
         # 绑定双击事件
         self.risk_tree.bind("<Double-1>", self.show_post_detail)
     
@@ -205,6 +216,9 @@ class NgaMonitorGUI:
         self.data_tree.tag_configure('medium_risk', background='#ffffcc')
     
     def update_analysis(self):
+        import matplotlib
+        matplotlib.rcParams['font.sans-serif'] = ['Microsoft YaHei']  # 支持中文
+        matplotlib.rcParams['axes.unicode_minus'] = False  # 正确显示负号
         if not self.posts:
             return
             

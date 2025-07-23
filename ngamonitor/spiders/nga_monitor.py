@@ -2,24 +2,20 @@ import scrapy
 import time
 import random
 import json
-import pandas as pd
 from urllib.parse import urlencode
 from datetime import datetime
 from scrapy.spidermiddlewares.httperror import HttpError
-from scrapy.exporters import BaseItemExporter
 from twisted.internet.error import ConnectionRefusedError
 
 class NgaMonitorSpider(scrapy.Spider):
     name = 'nga_monitor'
     allowed_domains = ['bbs.nga.cn']
     custom_settings = {
-        'ITEM_PIPELINES': {
-            'ngamonitor.pipelines.NgaMonitorPipeline': 300,
-        },
         'DOWNLOAD_DELAY': 5,
         'CONCURRENT_REQUESTS': 4,
-        'RETRY_TIMES': 2,
+        'RETRY_TIMES': 3,
         'COOKIES_ENABLED': True,
+        'CLOSESPIDER_ITEMCOUNT': 100,
         'DEFAULT_REQUEST_HEADERS': {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'zh-CN,zh;q=0.9',
@@ -28,43 +24,39 @@ class NgaMonitorSpider(scrapy.Spider):
         }
     }
 
-    def __init__(self, fid='7', pages='5', uid='', *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fid = fid
-        self.pages = int(pages)  # 确保是整数
-        self.uid = kwargs.get('uid', '')  # 改为从参数获取
-
-        # 添加Cookie有效性检查
-        if not uid or not uid.isdigit():
-            self.logger.error("未设置有效的用户UID，请检查配置")
-            raise CloseSpider("无效的用户UID配置")
-        
-        self.uid = uid
+        self.uid = kwargs.get('uid', '17454557')
         self.cookies = {
             'ngaPassportUid': self.uid,
             'lastvisit': str(int(time.time()) - 300),
             'guestJs': str(int(time.time())),
         }
-        self.fid_list = [7]
+        self.fid_list = [7, 459, 422, 624]
 
-    async def start(self):
-        """替代旧的 start_requests 方法"""
-        for page in range(1, self.pages + 1):
-            url = f"https://bbs.nga.cn/thread.php?fid={self.fid}&page={page}"
+    def start_requests(self):
+        for fid in self.fid_list:
+            params = {
+                'fid': fid,
+                'page': 1,
+                '__uid': self.uid,
+                '__timestamp': int(time.time()),
+                '__output': '11'
+            }
+            url = f"https://bbs.nga.cn/thread.php?{urlencode(params)}"
+        
             yield scrapy.Request(
                 url=url,
-                callback=self.parse,
+                cookies=self.cookies,
                 headers=self.get_dynamic_headers(),
-                meta={'page': page}
+                callback=self.parse_forum,
+                meta={'fid': fid, 'page': 1},
+                errback=self.handle_error
             )
 
     def parse_forum(self, response):
         fid = response.meta['fid']
         current_page = response.meta['page']
-        
-        if current_page >= 5 or not data['data'].get('__next__', False):  # 明确限制5页
-            self.logger.info(f"已完成板块{fid}的5页爬取")  # 修复为 self.logger
-            return
         
         if 'login.php' in response.url:
             self.logger.error(f"需要重新登录！当前Cookies已失效")
@@ -95,7 +87,7 @@ class NgaMonitorSpider(scrapy.Spider):
                     priority=1
                 )
 
-            if current_page < 5 and data['data']['__next__']:
+            if current_page < 3 and data['data'].get('__next__'):
                 next_page = current_page + 1
                 params = {
                     'fid': fid,
@@ -116,18 +108,14 @@ class NgaMonitorSpider(scrapy.Spider):
                 
         except (json.JSONDecodeError, KeyError) as e:
             self.logger.error(f"JSON解析失败: {e}, URL: {response.url}")
-        except Exception as e:
-            self.logger.error(f"解析失败: {e}\n响应内容: {response.text[:500]}")
-            yield None
 
     def parse_post(self, response):
         item = response.meta['item']
-        # 修正后
-        item['content'] = ' '.join(response.css('#postcontent0 ::text').getall()).strip()
+        content_parts = response.css('#postcontent0 ::text').getall()
+        item['content'] = ''.join(content_parts).strip()
         
         comments = []
-        for i, floor in enumerate(response.css('div.postbox.reply')[:20]): 
-            if i >= 20: break
+        for floor in response.css('div.postbox.reply'):
             comments.append({
                 'post_id': item['post_id'],
                 'author': floor.css('a.author::text').get(),
@@ -135,25 +123,21 @@ class NgaMonitorSpider(scrapy.Spider):
                 'floor': floor.css('span.floor::text').get('').replace('#', ''),
                 'post_time': floor.css('span.postInfo::text').re_first(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}')
             })
+    
         item['comments'] = comments
         yield item
 
     def get_dynamic_headers(self):
-        headers = {
-            'User-Agent': self.settings.get('USER_AGENT'),
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Referer': 'https://bbs.nga.cn/',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-Fetch-User': '?1',
+        return {
+            'User-Agent': random.choice([
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0'
+            ]),
+            'Referer': f'https://bbs.nga.cn/thread.php?fid={random.choice(self.fid_list)}',
+            'X-Request-Time': str(int(time.time() * 1000)),
             'X-Forwarded-For': f'{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}'
         }
-        return headers    
 
     def handle_error(self, failure):
         self.logger.error(f"请求失败: {failure.request.url}")
