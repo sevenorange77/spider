@@ -1,1 +1,0 @@
-python "%~dp0nga_monitor_gui.py"

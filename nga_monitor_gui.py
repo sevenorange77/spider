@@ -129,7 +129,7 @@ class NgaMonitorGUI:
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # 创建高风险帖子列表区域，支持横纵滚动
-        risk_frame = ttk.LabelFrame(self.analysis_frame, text="高风险帖子")
+        risk_frame = ttk.LabelFrame(self.analysis_frame, text="风险帖子")
         risk_frame.pack(fill=tk.BOTH, padx=10, pady=10, expand=True)
 
         # 横向滚动条

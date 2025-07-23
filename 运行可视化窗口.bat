@@ -1,3 +1,1 @@
-@echo off
-scrapy crawl nga_monitor -o data/output.json
-pause
+python "%~dp0nga_monitor_gui.py"
