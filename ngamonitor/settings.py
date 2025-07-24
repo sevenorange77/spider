@@ -28,7 +28,6 @@ DEFAULT_REQUEST_HEADERS = {
 
 # 中间件配置
 DOWNLOADER_MIDDLEWARES = {
-    'ngamonitor.middlewares.RandomProxyMiddleware': 543,
     'ngamonitor.middlewares.CustomHeadersMiddleware': 544,
     'scrapy.downloadermiddlewares.retry.RetryMiddleware': 550,
 }

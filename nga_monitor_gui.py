@@ -18,6 +18,14 @@ import queue
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 class NgaMonitorGUI:
+    # 板块ID到名称的映射
+    FID_NAME_MAP = {
+        7: '艾泽拉斯议事厅 - Hall of Azeroth',
+        459: '守 望 先 锋',
+        422: '炉 石 传 说',
+        624: '经 典 旧 世',
+        # 可根据实际需要补充
+    }
     def __init__(self, root):
         self.log_queue = queue.Queue()
         self.log_timer_id = None
@@ -30,8 +38,7 @@ class NgaMonitorGUI:
         self.settings = {
             'fid': '7',
             'pages': '5',
-            'uid': '17454557',
-            'proxies': "http://user:pass@proxy1.example.com:8080\nhttp://user:pass@proxy2.example.com:8080"
+            'uid': '17454557'
         }
         self.posts = []
         self.crawler_process = None
@@ -92,24 +99,28 @@ class NgaMonitorGUI:
     
     def create_data_tab(self):
         # 创建表格
-        columns = ("post_id", "title", "author", "post_time", "sentiment", "risk_level")
+        columns = ("forum_name", "title", "author", "post_time", "sentiment", "risk_level", "crawl_time", "post_url")
         self.data_tree = ttk.Treeview(self.data_frame, columns=columns, show="headings", height=20)
         
         # 设置列宽
-        self.data_tree.column("post_id", width=80, anchor=tk.CENTER)
+        self.data_tree.column("forum_name", width=160)
         self.data_tree.column("title", width=300)
         self.data_tree.column("author", width=100)
         self.data_tree.column("post_time", width=120, anchor=tk.CENTER)
         self.data_tree.column("sentiment", width=80, anchor=tk.CENTER)
         self.data_tree.column("risk_level", width=80, anchor=tk.CENTER)
+        self.data_tree.column("crawl_time", width=120, anchor=tk.CENTER)
+        self.data_tree.column("post_url", width=220)
         
         # 设置列标题
-        self.data_tree.heading("post_id", text="帖子ID")
+        self.data_tree.heading("forum_name", text="板块名称")
         self.data_tree.heading("title", text="标题")
         self.data_tree.heading("author", text="作者")
         self.data_tree.heading("post_time", text="发帖时间")
         self.data_tree.heading("sentiment", text="情感值")
         self.data_tree.heading("risk_level", text="风险等级")
+        self.data_tree.heading("crawl_time", text="抓取时间")
+        self.data_tree.heading("post_url", text="帖子链接")
         
         # 添加滚动条
         scrollbar = ttk.Scrollbar(self.data_frame, orient=tk.VERTICAL, command=self.data_tree.yview)
@@ -121,6 +132,8 @@ class NgaMonitorGUI:
         
         # 添加详情查看功能
         self.data_tree.bind("<Double-1>", self.show_post_detail)
+        # 添加点击事件
+        self.data_tree.bind("<Button-1>", self.on_tree_click)
     
     def create_analysis_tab(self):
         # 创建画布用于显示图表
@@ -189,29 +202,30 @@ class NgaMonitorGUI:
         # 清空现有数据
         for item in self.data_tree.get_children():
             self.data_tree.delete(item)
-        
         # 添加新数据
         for post in self.posts:
             sentiment = f"{post.get('sentiment', 0.5):.2f}" if 'sentiment' in post else "0.50"
             risk_level = post.get('risk_level', 0)
-            
-            # 根据风险等级设置标签颜色
+            fid = post.get('fid', None)
+            forum_name = self.FID_NAME_MAP.get(int(fid), f"板块{fid}") if fid is not None else "未知"
+            post_url = post.get('url', '')
+            crawl_time = post.get('crawl_time', '')
             tags = ()
             if risk_level >= 2:
                 tags = ('high_risk',)
             elif risk_level == 1:
                 tags = ('medium_risk',)
-            
-            self.data_tree.insert("", "end", values=(
-                post['post_id'],
+            # 用post_id作为iid
+            self.data_tree.insert("", "end", iid=str(post['post_id']), values=(
+                forum_name,
                 post['title'],
                 post['author'],
                 post['post_time'],
                 sentiment,
-                risk_level
+                risk_level,
+                crawl_time,
+                post_url
             ), tags=tags)
-        
-        # 配置标签样式
         self.data_tree.tag_configure('high_risk', background='#ffcccc')
         self.data_tree.tag_configure('medium_risk', background='#ffffcc')
     
@@ -279,12 +293,10 @@ class NgaMonitorGUI:
     def show_post_detail(self, event):
         # 获取选中的帖子
         tree = event.widget
-        item = tree.selection()[0]
-        values = tree.item(item, "values")
-        post_id = values[0]
-        
-        # 查找帖子详情
-        post = next((p for p in self.posts if str(p['post_id']) == post_id), None)
+        if not tree.selection():
+            return
+        iid = tree.selection()[0]
+        post = next((p for p in self.posts if str(p['post_id']) == iid), None)
         if post:
             self.show_detail_window(post)
     
@@ -309,6 +321,18 @@ class NgaMonitorGUI:
         ttk.Label(meta_frame, text=f"作者: {post['author']}").pack(side=tk.LEFT, padx=10)
         ttk.Label(meta_frame, text=f"发布时间: {post['post_time']}").pack(side=tk.LEFT, padx=10)
         ttk.Label(meta_frame, text=f"回复数: {post.get('reply_count', 'N/A')}").pack(side=tk.LEFT, padx=10)
+        
+        # 板块信息
+        fid = post.get('fid', None)
+        forum_name = self.FID_NAME_MAP.get(int(fid), f"板块{fid}") if fid is not None else "未知"
+        forum_link = f"https://bbs.nga.cn/thread.php?fid={fid}" if fid is not None else ""
+        forum_frame = ttk.Frame(frame)
+        forum_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(forum_frame, text=f"板块: {forum_name} (ID: {fid})").pack(side=tk.LEFT, padx=10)
+        if forum_link:
+            link_label = ttk.Label(forum_frame, text=forum_link, foreground="blue", cursor="hand2")
+            link_label.pack(side=tk.LEFT, padx=10)
+            link_label.bind("<Button-1>", lambda e: os.system(f'start {forum_link}'))
         
         # 情感和风险信息
         risk_frame = ttk.Frame(frame)
@@ -396,7 +420,12 @@ class NgaMonitorGUI:
                 "nga_monitor",
                 "-a", f"fid={self.settings['fid']}",
                 "-a", f"pages={self.settings['pages']}",
-                "-a", f"uid={self.settings['uid']}",  # 添加UID参数
+                "-a", f"uid={self.settings['uid']}",
+                "-a", f"cookie={self.settings.get('cookie','')}",
+                "-s", f"DOWNLOAD_DELAY={self.settings.get('download_delay', 5)}",
+                "-s", f"CONCURRENT_REQUESTS={self.settings.get('concurrent_requests', 4)}",
+                "-s", f"RETRY_TIMES={self.settings.get('retry_times', 2)}",
+                "-s", f"CLOSESPIDER_ITEMCOUNT={self.settings.get('max_itemcount', 100)}",
                 "-o",
                 self.output_file
             ]
@@ -497,9 +526,16 @@ class NgaMonitorGUI:
             self.add_log(f"加载数据失败: {str(e)}")
 
     def safe_update_data(self, data):
-        self.posts = data
-        self.update_data_table()
-        self.update_analysis()
+        """安全更新数据并显示进度"""
+        try:
+            self.posts = data
+            self.update_data_table()
+            self.update_analysis()
+        
+            # 在日志中显示进度
+            self.add_log(f"已加载 {len(data)} 条帖子数据")
+        except Exception as e:
+            self.add_log(f"更新数据失败: {str(e)}")
 
     def update_buttons_state(self):
         """更新按钮状态"""
@@ -564,7 +600,7 @@ class NgaMonitorGUI:
         # 创建设置窗口
         settings_win = tk.Toplevel(self.root)
         settings_win.title("爬虫设置")
-        settings_win.geometry("500x400")
+        settings_win.geometry("500x600")
         
         # 创建选项卡
         notebook = ttk.Notebook(settings_win)
@@ -589,38 +625,68 @@ class NgaMonitorGUI:
         pages_entry.grid(row=2, column=1, padx=10, pady=10)
         pages_entry.insert(0, self.settings.get('pages', '5'))
         
-        # 代理设置
-        proxy_frame = ttk.Frame(notebook)
-        notebook.add(proxy_frame, text="代理设置")
+        ttk.Label(basic_frame, text="最大爬取数:").grid(row=3, column=0, padx=10, pady=10, sticky=tk.W)
+        maxcount_entry = ttk.Entry(basic_frame, width=30)
+        maxcount_entry.grid(row=3, column=1, padx=10, pady=10)
+        maxcount_entry.insert(0, str(self.settings.get('max_itemcount', 100)))
         
-        ttk.Label(proxy_frame, text="代理列表 (每行一个):").grid(row=0, column=0, padx=10, pady=10, sticky=tk.W)
-        proxy_text = scrolledtext.ScrolledText(proxy_frame, width=50, height=10)
-        proxy_text.grid(row=1, column=0, columnspan=2, padx=10, pady=10)
-        proxy_text.insert(tk.END, self.settings.get('proxies', ''))
+        ttk.Label(basic_frame, text="登录Cookie:").grid(row=4, column=0, padx=10, pady=10, sticky=tk.W)
+        cookie_entry = ttk.Entry(basic_frame, width=50)
+        cookie_entry.grid(row=4, column=1, padx=10, pady=10)
+        cookie_entry.insert(0, self.settings.get('cookie', ''))
+        
+        # 策略设置
+        strategy_frame = ttk.Frame(notebook)
+        notebook.add(strategy_frame, text="爬虫策略")
+        
+        ttk.Label(strategy_frame, text="请求延迟 (DOWNLOAD_DELAY, 秒):").grid(row=0, column=0, padx=10, pady=10, sticky=tk.W)
+        delay_entry = ttk.Entry(strategy_frame, width=30)
+        delay_entry.grid(row=0, column=1, padx=10, pady=10)
+        delay_entry.insert(0, str(self.settings.get('download_delay', 5)))
+        
+        ttk.Label(strategy_frame, text="最大并发数 (CONCURRENT_REQUESTS):").grid(row=1, column=0, padx=10, pady=10, sticky=tk.W)
+        concur_entry = ttk.Entry(strategy_frame, width=30)
+        concur_entry.grid(row=1, column=1, padx=10, pady=10)
+        concur_entry.insert(0, str(self.settings.get('concurrent_requests', 4)))
+        
+        ttk.Label(strategy_frame, text="重试次数 (RETRY_TIMES):").grid(row=2, column=0, padx=10, pady=10, sticky=tk.W)
+        retry_entry = ttk.Entry(strategy_frame, width=30)
+        retry_entry.grid(row=2, column=1, padx=10, pady=10)
+        retry_entry.insert(0, str(self.settings.get('retry_times', 2)))
         
         # 保存按钮
         save_btn = ttk.Button(settings_win, text="保存设置", command=lambda: self.save_settings(
             uid_entry.get(),
             fid_entry.get(),
             pages_entry.get(),
-            proxy_text.get("1.0", tk.END)
+            delay_entry.get(),
+            concur_entry.get(),
+            retry_entry.get(),
+            maxcount_entry.get(),
+            cookie_entry.get(),
+            settings_win  # 传递窗口对象
         ))
         save_btn.pack(pady=10)
     
-    def save_settings(self, uid, fid, pages, proxies):
+    def save_settings(self, uid, fid, pages, download_delay=None, concurrent_requests=None, retry_times=None, max_itemcount=None, cookie=None, win=None):
         """保存设置到self.settings字典"""
         self.settings['uid'] = uid
         self.settings['fid'] = fid
         self.settings['pages'] = pages
-        self.settings['proxies'] = proxies.strip()
-
-        # 设置环境变量（代理中间件会使用）
-        os.environ['PROXY_LIST'] = ','.join(
-            [p.strip() for p in proxies.split('\n') if p.strip()]
-        )
-
-        self.add_log(f"设置已保存: UID={uid}, FID={fid}, 页数={pages}")
+        if download_delay is not None:
+            self.settings['download_delay'] = int(download_delay)
+        if concurrent_requests is not None:
+            self.settings['concurrent_requests'] = int(concurrent_requests)
+        if retry_times is not None:
+            self.settings['retry_times'] = int(retry_times)
+        if max_itemcount is not None:
+            self.settings['max_itemcount'] = int(max_itemcount)
+        if cookie is not None:
+            self.settings['cookie'] = cookie
+        self.add_log(f"设置已保存: UID={uid}, FID={fid}, 页数={pages}, 延迟={download_delay}, 并发={concurrent_requests}, 重试={retry_times}, 最大数={max_itemcount}, Cookie={'已设置' if cookie else '未设置'}")
         messagebox.showinfo("设置保存", "设置已成功保存")
+        if win is not None:
+            win.destroy()
     
     def add_log(self, message):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -647,8 +713,11 @@ class NgaMonitorGUI:
             while not self.log_queue.empty():
                 try:
                     line, is_error = self.log_queue.get_nowait()
-                    prefix = "错误: " if is_error else ""
-                    self.add_log(f"{prefix}{line}")
+                    # 只对包含ERROR或WARNING的stderr行加前缀
+                    if is_error and ("ERROR" in line or "WARNING" in line):
+                        self.add_log(f"错误: {line}")
+                    else:
+                        self.add_log(line)
                 except queue.Empty:
                     break
         
@@ -665,18 +734,21 @@ class NgaMonitorGUI:
             # 每1秒检查一次
             self.log_timer_id = self.root.after(1000, self.check_data_update)
 
-    # 修改 safe_update_data 方法
-    def safe_update_data(self, data):
-        """安全更新数据并显示进度"""
-        try:
-            self.posts = data
-            self.update_data_table()
-            self.update_analysis()
-        
-            # 在日志中显示进度
-            self.add_log(f"已加载 {len(data)} 条帖子数据")
-        except Exception as e:
-            self.add_log(f"更新数据失败: {str(e)}")
+    def on_tree_click(self, event):
+        # 判断是否点击了“帖子链接”列，若是则自动打开浏览器
+        region = self.data_tree.identify('region', event.x, event.y)
+        if region != 'cell':
+            return
+        col = self.data_tree.identify_column(event.x)
+        col_index = int(col.replace('#', '')) - 1
+        columns = ("forum_name", "title", "author", "post_time", "sentiment", "risk_level", "crawl_time", "post_url")
+        if columns[col_index] == 'post_url':
+            row_id = self.data_tree.identify_row(event.y)
+            if row_id:
+                url = self.data_tree.item(row_id, 'values')[col_index]
+                if url:
+                    import webbrowser
+                    webbrowser.open(url)
 
 # 主程序入口
 if __name__ == "__main__":

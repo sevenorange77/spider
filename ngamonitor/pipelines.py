@@ -9,19 +9,24 @@ class NgaMonitorPipeline:
     ]
     
     def process_item(self, item, spider):
-        if 'content' in item:
+        if 'content' in item and item['content']:
             content = item['content']
             try:
                 # 处理长文本的分块分析
                 if len(content) > 500:
                     chunks = [content[i:i+500] for i in range(0, len(content), 500)]
-                    sentiments = [SnowNLP(chunk).sentiments for chunk in chunks]
-                    item['sentiment'] = sum(sentiments) / len(sentiments)
+                    sentiments = [SnowNLP(chunk).sentiments for chunk in chunks if chunk.strip()]
+                    if sentiments:
+                        item['sentiment'] = sum(sentiments) / len(sentiments)
+                    else:
+                        item['sentiment'] = 0.5
                 else:
                     item['sentiment'] = SnowNLP(content).sentiments
             except Exception as e:
                 spider.logger.error(f"情感分析失败: {str(e)}")
                 item['sentiment'] = 0.5
+        else:
+            item['sentiment'] = 0.5
             
             # 风险关键词匹配
             item['risk_level'] = 0

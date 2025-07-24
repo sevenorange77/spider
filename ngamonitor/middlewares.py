@@ -103,34 +103,6 @@ class NgaMonitorDownloaderMiddleware:
     def spider_opened(self, spider):
         spider.logger.info("Spider opened: %s" % spider.name)
         
-# 新增代理中间件
-class RandomProxyMiddleware:
-    def __init__(self):
-        # 从环境变量获取代理列表
-        proxy_str = os.getenv('PROXY_LIST', '')
-        
-        # 处理代理格式
-        if proxy_str:
-            self.proxy_list = [p.strip() for p in proxy_str.split(',') if p.strip()]
-        else:
-            self.proxy_list = []
-        
-        # 添加日志输出
-        print(f"Loaded proxies: {len(self.proxy_list)} available")
-        
-        self.proxy_usage = {p: 0 for p in self.proxy_list}
-    
-    def process_request(self, request, spider):
-        if not self.proxy_list:
-            spider.logger.debug("No proxies available, skipping proxy middleware")
-            return  # 无可用代理时跳过
-        
-        # 选择使用次数最少的代理
-        proxy = min(self.proxy_usage, key=self.proxy_usage.get)
-        request.meta['proxy'] = proxy
-        self.proxy_usage[proxy] += 1
-        spider.logger.debug(f"Using proxy: {proxy} (used {self.proxy_usage[proxy]} times)")
-
 # 增强的请求头中间件
 class CustomHeadersMiddleware:
     def process_request(self, request, spider):

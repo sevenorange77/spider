@@ -1,0 +1,14 @@
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36
+Referer: https://bbs.nga.cn/
+X-Request-Time: 1753382484044
+X-Forwarded-For: 58.131.96.94
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: zh-CN,zh;q=0.9
+Accept-Encoding: gzip, deflate, br
+Connection: keep-alive
+X-Requested-With: XMLHttpRequest
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: same-origin
+Sec-Fetch-User: ?1
+Cookie: ngaPassportUid=17454557; lastvisit=1753382180; guestJs=1753382480; lastvisit=1753382487; lastpath=/thread.php?fid=459&page=1&__uid=17454557&__timestamp=1753382483&__output=11; ngaPassportUid=guest068827e575dcc4

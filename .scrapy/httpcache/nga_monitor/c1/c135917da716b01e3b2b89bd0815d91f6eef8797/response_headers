@@ -1,12 +1,11 @@
-Date: Wed, 23 Jul 2025 18:40:39 GMT
+Date: Thu, 24 Jul 2025 19:04:27 GMT
 Content-Type: text/html; charset=GBK
 Server: nginx
 Strict-Transport-Security: max-age=604800
-X-Nga-Server: 52
-Set-Cookie: lastvisit=1753296039; path=/; domain=bbs.nga.cn; secure
+X-Nga-Server: 57
+Set-Cookie: lastvisit=1753383867; path=/; domain=bbs.nga.cn; secure
 Set-Cookie: lastpath=/read.php?tid=43889553; path=/; domain=bbs.nga.cn; secure
-Set-Cookie: ngaPassportUid=guest068812ca72adbc; expires=Thu, 24-Jul-2025 04:40:39 GMT; Max-Age=36000; path=/; domain=.nga.cn
 X-Frame-Options: SAMEORIGIN
 Content-Encoding: gzip
-X-Via: 1.1 PS-KMG-01xTs21:20 (Cdn Cache Server V2.0)
-X-Ws-Request-Id: 68812ca7_PS-KMG-01xTs21_11831-56323
+X-Via: 1.1 PS-KMG-01xTs21:17 (Cdn Cache Server V2.0)
+X-Ws-Request-Id: 688283bb_PS-KMG-01xTs21_33315-64947

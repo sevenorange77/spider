@@ -27,12 +27,23 @@ class NgaMonitorSpider(scrapy.Spider):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.uid = kwargs.get('uid', '17454557')
-        self.cookies = {
-            'ngaPassportUid': self.uid,
-            'lastvisit': str(int(time.time()) - 300),
-            'guestJs': str(int(time.time())),
-        }
-        self.fid_list = [7, 459, 422, 624]
+        # 支持外部cookie字符串
+        cookie_str = kwargs.get('cookie')
+        if cookie_str:
+            # 解析cookie字符串为字典
+            self.cookies = {kv.split('=')[0].strip(): kv.split('=')[1].strip() for kv in cookie_str.split(';') if '=' in kv}
+        else:
+            self.cookies = {
+                'ngaPassportUid': self.uid,
+                'lastvisit': str(int(time.time()) - 300),
+                'guestJs': str(int(time.time())),
+            }
+        # 支持单fid或逗号分隔的多个fid
+        fid_arg = kwargs.get('fid')
+        if fid_arg:
+            self.fid_list = [int(f) for f in str(fid_arg).split(',') if f.strip()]
+        else:
+            self.fid_list = [7, 459, 422, 624]
 
     def start_requests(self):
         for fid in self.fid_list:
@@ -115,15 +126,46 @@ class NgaMonitorSpider(scrapy.Spider):
         item['content'] = ''.join(content_parts).strip()
         
         comments = []
-        for floor in response.css('div.postbox.reply'):
+        # 兼容NGA多种回帖结构，采集主楼以外所有楼层
+        # 1. 先尝试div[id^="post"]，主楼通常id=post1
+        floors = response.css('div[id^="post"]')
+        for floor in floors:
+            post_id_attr = floor.attrib.get('id', '')
+            if post_id_attr == 'post1':
+                continue
+            # 兼容部分页面主楼id可能不是post1，跳过第一个楼层
+            if post_id_attr and floors.index(floor) == 0:
+                continue
+            # 只采集有内容的楼层
+            content = ''.join(floor.css('.postcontent ::text').getall()).strip()
+            if not content:
+                continue
+            author = floor.css('a.author::text').get() or floor.css('.author::text').get()
+            floor_num = floor.css('span.floor::text').get('')
+            post_time = floor.css('span.postInfo::text').re_first(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}')
             comments.append({
                 'post_id': item['post_id'],
-                'author': floor.css('a.author::text').get(),
-                'content': ''.join(floor.css('.postcontent ::text').getall()).strip(),
-                'floor': floor.css('span.floor::text').get('').replace('#', ''),
-                'post_time': floor.css('span.postInfo::text').re_first(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}')
+                'author': author,
+                'content': content,
+                'floor': floor_num.replace('#', '') if floor_num else '',
+                'post_time': post_time
             })
-    
+        # 2. 如果上面没采到，尝试div.reply/postbox.reply等其它常见结构
+        if not comments:
+            for floor in response.css('div.reply,div.postbox.reply'):
+                content = ''.join(floor.css('.postcontent ::text').getall()).strip()
+                if not content:
+                    continue
+                author = floor.css('a.author::text').get() or floor.css('.author::text').get()
+                floor_num = floor.css('span.floor::text').get('')
+                post_time = floor.css('span.postInfo::text').re_first(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}')
+                comments.append({
+                    'post_id': item['post_id'],
+                    'author': author,
+                    'content': content,
+                    'floor': floor_num.replace('#', '') if floor_num else '',
+                    'post_time': post_time
+                })
         item['comments'] = comments
         yield item
 
@@ -145,9 +187,9 @@ class NgaMonitorSpider(scrapy.Spider):
         if failure.check(HttpError):
             response = failure.value.response
             if response.status == 403:
-                self.logger.warning("触发403限制，建议更换IP或更新Cookies")
+                self.logger.warning("触发403限制，建议更新Cookies")
         elif failure.check(ConnectionRefusedError):
-            self.logger.warning("连接被拒绝，请检查代理设置")
+            self.logger.warning("连接被拒绝")
         
         retry_times = failure.request.meta.get('retry_times', 0)
         if retry_times < self.settings.getint('RETRY_TIMES'):
