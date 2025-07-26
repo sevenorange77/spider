@@ -586,7 +586,7 @@ class NgaMonitorGUI:
                 df = pd.DataFrame(self.posts)
                 
                 # 选择需要的列
-                columns = ['post_id', 'title', 'author', 'post_time', 'reply_count', 'sentiment', 'risk_level', 'content']
+                columns = ['post_id', 'title', 'author', 'post_time', 'reply_count', 'sentiment', 'risk_level', 'content', 'url']
                 df = df[[col for col in columns if col in df.columns]]
                 
                 df.to_excel(file_path, index=False, engine='openpyxl')
