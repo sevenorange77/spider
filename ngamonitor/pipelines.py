@@ -5,7 +5,7 @@ from snownlp import SnowNLP
 class NgaMonitorPipeline:
     # 风险关键词库（需动态更新）
     RISK_KEYWORDS = [
-        'bug', '故障', '诈骗', '退款', '封号', '补偿', '垃圾', '卸载'
+        'bug', '国服', '雷火', '退款', '封号', '客服', '垃圾', '运营', 'BUG'
     ]
     
     def process_item(self, item, spider):
@@ -25,18 +25,19 @@ class NgaMonitorPipeline:
             except Exception as e:
                 spider.logger.error(f"情感分析失败: {str(e)}")
                 item['sentiment'] = 0.5
-        else:
-            item['sentiment'] = 0.5
-            
-            # 风险关键词匹配
-            item['risk_level'] = 0
+        # 风险关键词匹配和标记
+        item['risk_level'] = 0
+        item['risk_keywords'] = []
+        if 'content' in item and item['content']:
+            content = item['content']
             for keyword in self.RISK_KEYWORDS:
-                if keyword in content:
+                if keyword.lower() in content.lower():
                     item['risk_level'] += 1
+                    item['risk_keywords'].append(keyword)
                     
-            # 高风险内容即时预警
-            if item['sentiment'] < 0.3 or item['risk_level'] >= 2:
-                self.send_alert(item)
+        # 高风险内容即时预警
+        if item['sentiment'] < 0.3 or item['risk_level'] >= 2:
+            self.send_alert(item)
         return item
 
     def send_alert(self, item):

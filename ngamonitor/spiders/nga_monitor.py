@@ -43,7 +43,7 @@ class NgaMonitorSpider(scrapy.Spider):
         if fid_arg:
             self.fid_list = [int(f) for f in str(fid_arg).split(',') if f.strip()]
         else:
-            self.fid_list = [7, 459, 422, 624]
+            self.fid_list = [7, 459, 422, 624, 850]
 
     def start_requests(self):
         for fid in self.fid_list:

@@ -25,6 +25,7 @@ class NgaMonitorGUI:
         422: '炉 石 传 说',
         624: '经 典 旧 世',
         # 可根据实际需要补充
+        850: '巫妖王之怒', 
     }
     def __init__(self, root):
         self.log_queue = queue.Queue()
@@ -154,7 +155,7 @@ class NgaMonitorGUI:
 
         self.risk_tree = ttk.Treeview(
             risk_frame,
-            columns=("post_id", "title", "risk_level"),
+            columns=("post_id", "title", "risk_level", "url"),
             show="headings",
             height=10,
             xscrollcommand=xscrollbar.set,
@@ -163,17 +164,19 @@ class NgaMonitorGUI:
         self.risk_tree.column("post_id", width=80, anchor=tk.CENTER)
         self.risk_tree.column("title", width=400)
         self.risk_tree.column("risk_level", width=100, anchor=tk.CENTER)
+        self.risk_tree.column("url", width=0, stretch=False)  # 隐藏url列
 
         self.risk_tree.heading("post_id", text="帖子ID")
         self.risk_tree.heading("title", text="标题")
         self.risk_tree.heading("risk_level", text="风险等级")
+        self.risk_tree.heading("url", text="url")
 
         self.risk_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         xscrollbar.config(command=self.risk_tree.xview)
         yscrollbar.config(command=self.risk_tree.yview)
 
         # 绑定双击事件
-        self.risk_tree.bind("<Double-1>", self.show_post_detail)
+        self.risk_tree.bind("<Double-1>", self.open_risk_post_url)
     
     def create_log_tab(self):
         # 创建日志文本框
@@ -215,10 +218,16 @@ class NgaMonitorGUI:
                 tags = ('high_risk',)
             elif risk_level == 1:
                 tags = ('medium_risk',)
+            # 在标题中显示风险词信息
+            title = post['title']
+            risk_keywords = post.get('risk_keywords', [])
+            if risk_keywords:
+                title = f"{title} [风险词: {', '.join(risk_keywords)}]"
+            
             # 用post_id作为iid
             self.data_tree.insert("", "end", iid=str(post['post_id']), values=(
                 forum_name,
-                post['title'],
+                title,
                 post['author'],
                 post['post_time'],
                 sentiment,
@@ -277,18 +286,18 @@ class NgaMonitorGUI:
         ax3.set_title('高风险关键词分析')
         
         self.canvas.draw()
-        
+
         # 更新高风险帖子列表
         for item in self.risk_tree.get_children():
             self.risk_tree.delete(item)
-        
-        high_risk_posts = [p for p in self.posts if p.get('risk_level', 0) >= 1]
-        for post in high_risk_posts:
-            self.risk_tree.insert("", "end", values=(
-                post['post_id'],
-                post['title'],
-                post['risk_level']
-            ))
+        for post in self.posts:
+            if post.get('risk_level', 0) >= 2:
+                self.risk_tree.insert("", "end", iid=str(post['post_id']), values=(
+                    post['post_id'],
+                    post['title'],
+                    post.get('risk_level', 0),
+                    post.get('url', '')
+                ))
     
     def show_post_detail(self, event):
         # 获取选中的帖子
@@ -361,7 +370,17 @@ class NgaMonitorGUI:
         
         content_text = scrolledtext.ScrolledText(content_frame, wrap=tk.WORD, width=80, height=20)
         content_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        content_text.insert(tk.END, post.get('content', '内容不可用'))
+        
+        # 高亮风险词
+        content = post.get('content', '内容不可用')
+        risk_keywords = post.get('risk_keywords', [])
+        
+        if risk_keywords:
+            # 插入高亮内容
+            self.insert_highlighted_text(content_text, content, risk_keywords)
+        else:
+            content_text.insert(tk.END, content)
+        
         content_text.configure(state=tk.DISABLED)
         
         # 评论区域（如果有）
@@ -749,6 +768,54 @@ class NgaMonitorGUI:
                 if url:
                     import webbrowser
                     webbrowser.open(url)
+
+    def insert_highlighted_text(self, text_widget, content, risk_keywords):
+        """在文本框中插入高亮的风险词"""
+        import re
+        
+        # 创建高亮标签
+        text_widget.tag_configure("risk_highlight", background="red", foreground="white", font=("Arial", 10, "bold"))
+        
+        # 将内容按风险词分割并插入
+        current_pos = 0
+        content_lower = content.lower()
+        
+        for keyword in risk_keywords:
+            keyword_lower = keyword.lower()
+            start = 0
+            while True:
+                # 查找关键词位置
+                pos = content_lower.find(keyword_lower, start)
+                if pos == -1:
+                    break
+                
+                # 插入关键词前的文本
+                if pos > current_pos:
+                    text_widget.insert(tk.END, content[current_pos:pos])
+                
+                # 插入高亮的关键词
+                text_widget.insert(tk.END, content[pos:pos+len(keyword)], "risk_highlight")
+                
+                current_pos = pos + len(keyword)
+                start = pos + 1
+        
+        # 插入剩余文本
+        if current_pos < len(content):
+            text_widget.insert(tk.END, content[current_pos:])
+
+    def open_risk_post_url(self, event):
+        tree = event.widget
+        if not tree.selection():
+            return
+        iid = tree.selection()[0]
+        url = tree.item(iid, 'values')[3]  # url在第4列
+        print("调试：url =", url)
+        if url and url.startswith('http'):
+            import webbrowser
+            webbrowser.open_new_tab(url)
+        else:
+            from tkinter import messagebox
+            messagebox.showwarning("无效链接", "未找到有效的帖子链接！")
 
 # 主程序入口
 if __name__ == "__main__":
